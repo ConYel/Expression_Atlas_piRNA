@@ -1,7 +1,7 @@
 ---
 title: "Report about conserved transcriptional signatures and evolutionary relationships of germ/stem cells in the PIWI-piRNA pathway"
 author: "Constantinos Yeles (Konstantinos Geles)"
-date: "Last update : `r format(Sys.Date(), '%a %b %d %Y')`"
+date: "Last update : Fri Nov 12 2021"
 output:
   html_document:
     toc: yes
@@ -15,9 +15,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
-```
+
 
 # Conserved transcriptional signatures and evolutionary relationships of germ/stem cells
 ## The PIWI-piRNA pathway expression in germ/stem cells
@@ -40,7 +38,8 @@ For the application of the workflow, the following tools/ workflows have been us
 
 ### Install and load libraries  
 
-```{r}
+
+```r
 if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
@@ -62,30 +61,35 @@ suppressPackageStartupMessages({
 ```
 
 ### Search which datasets in Expression Atlas have "stem" and "germ" terms
-```{r}
+
+```r
 atlasRes_stem <- searchAtlasExperiments( properties = "stem")
 atlasRes_germ <- searchAtlasExperiments( properties = "germ")
 ```
 
 Search if there are identical datasets in both sets 
-```{r}
+
+```r
 atlasRes_germ %>% as_tibble %>% filter(is_in(Accession, atlasRes_stem$Accession))
 ```
 
 join the two sets
-```{r}
+
+```r
 atlasRes <- as_tibble(atlasRes_stem) %>% full_join(as_tibble(atlasRes_germ))
 
 rm(atlasRes_stem, atlasRes_germ)
 ```
 
 Search which species are in the dataset
-```{r}
+
+```r
 atlasRes %>% dplyr::count(Species, sort = TRUE) 
 ```
 
 We will remove plant species from the dataset and microarray experiments
-```{r}
+
+```r
 atlasRes <- atlasRes %>% dplyr::filter(is_in(Species, 
                                           c("Mus musculus",
                                             "Homo sapiens",
@@ -97,21 +101,22 @@ atlasRes <- atlasRes %>% dplyr::filter(is_in(Species,
 ```
 
 ### Get the AtlasData summaries
-```{r}
+
+```r
 rnaseqExps <- getAtlasData(atlasRes$Accession)
 ```
 
 ### scale the counts using tidybulk
-```{r}
+
+```r
 rnaseqExps$`E-MTAB-2915`$rnaseq %>% identify_abundant(factor_of_interest = AtlasAssayGroup) %>% scale_abundance()
 ```
 
 
 ### Following _**Shirin's playgRound**_ instructions on getting gene identifiers*
 *with small modifications 
-```{r}
 
-
+```r
 #BiocManager::install( "ExpressionAtlas")
 library(ExpressionAtlas)
 library(tidyverse)
@@ -223,7 +228,6 @@ rnaseqExps$`E-MTAB-2915`$rnaseq %>%
     filter( is_in(.feature, piwi_genes_$Gene.stable.ID.1)) %>% 
     left_join(distinct(piwi_genes_, Gene.stable.ID.1, .keep_all = "TRUE"),
               by = c(.feature = "Gene.stable.ID.1" ))
-    
 ```
 
 
