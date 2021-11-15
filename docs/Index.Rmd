@@ -215,6 +215,8 @@ atlasRes %>%
     names %>%  
     set_names() %>% 
     map( ~dplyr::count(as_tibble(atlasRes), .data[[.x]], sort = TRUE))
+
+
 ```
 
 
