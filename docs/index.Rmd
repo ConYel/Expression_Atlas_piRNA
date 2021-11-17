@@ -91,7 +91,9 @@ atlasRes <- atlasRes %>% dplyr::filter(is_in(Species,
                                             "Drosophila melanogaster",
                                             "Rattus norvegicus",
                                             "Caenorhabditis elegans")),
-                                str_detect(Type, "RNA-seq"))
+                                str_detect(Type, "RNA-seq"),
+                                Accession != "E-MTAB-3578"#There may not currently be an Expression Atlas experiment summary available for E-MTAB-3578.
+                                )
 ```
 
 ### Get the AtlasData summaries
@@ -102,7 +104,7 @@ rnaseqExps <- getAtlasData(atlasRes$Accession)
 ### scale the counts using tidybulk
 ```{r}
 datasets_atlass_scaled <- map(
-    names(rnaseqExps)[1:2] %>% 
+    names(rnaseqExps) %>% 
          purrr::set_names(),
     ~ rnaseqExps %>% 
         extract2(.x) %>% 
@@ -124,7 +126,7 @@ datasets <- listDatasets(ensembl) %>%
     dplyr::filter(str_detect(dataset, 
                   c("mmusculus|rnorvegicus|melanogaster|celegans"))) 
 
-
+httr::set_config(httr::config(ssl_verifypeer = FALSE))
 human <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
 specieslist  <-  datasets$dataset
 ```
@@ -162,17 +164,18 @@ Get dataframe of human genes and their homologs
 ```{r}
 for (species in specieslist) {
     print(species)
-    assign(paste0("homologs_human_", species), getLDS(attributes = c("ensembl_gene_id", "chromosome_name"), 
-                                                      filters = "ensembl_gene_id", 
-                                                      values = gene_symbols$GENEID, 
-                                                      mart = human, 
-                                                      attributesL = c("ensembl_gene_id", 
-                                                                      "chromosome_name", 
-                                                                      "external_gene_name"), 
-                                                      martL = get(species)))
+    assign(paste0("homologs_human_", species), 
+           getLDS(attributes = c("ensembl_gene_id", "chromosome_name"),
+                  filters = "ensembl_gene_id",
+                  values = gene_symbols$GENEID,
+                  mart = human,
+                  attributesL = c("ensembl_gene_id", 
+                                  "chromosome_name", 
+                                  "external_gene_name"),
+                  martL = get(species)))
 }
 
-homologs_human_celegans_gene_ensembl <-  homologs_human_celegans_gene_ensembl %>% 
+homologs_human_celegans_gene_ensembl <- homologs_human_celegans_gene_ensembl %>% 
     mutate(organism_mart = "celegans") %>% 
     as_tibble() %>% 
     mutate(Chromosome.scaffold.name.1 = as.character(Chromosome.scaffold.name.1))
@@ -199,18 +202,33 @@ piwi_genes <- dplyr::bind_rows(homologs_human_celegans_gene_ensembl,
                                 homologs_human_dmelanogaster_gene_ensembl,
                                 homologs_human_mmusculus_gene_ensembl,
                                 homologs_human_rnorvegicus_gene_ensembl)
+
+rm(homologs_human_celegans_gene_ensembl,
+  homologs_human_dmelanogaster_gene_ensembl,
+   homologs_human_mmusculus_gene_ensembl,
+    homologs_human_rnorvegicus_gene_ensembl,
+  human,  human_EnsDb, mmusculus_gene_ensembl, rnorvegicus_gene_ensembl,
+  dmelanogaster_gene_ensembl, celegans_gene_ensembl)
 ```
 
 Keep only the piRNA biogenesis genes from the datasets
 ```{r}
- piwi_genes_dat <- map(datasets_atlass_scaled,
-    ~filter( .x, is_in(.feature, piwi_genes$Gene.stable.ID.1)) %>% 
-    left_join(distinct(piwi_genes, Gene.stable.ID.1, .keep_all = "TRUE"),
-              by = c(.feature = "Gene.stable.ID.1" ))
-    )
+piwi_genes_dat <- map(datasets_atlass_scaled,
+    ~as_tibble(.x) %>% 
+      filter(is_in(.feature, piwi_genes$Gene.stable.ID.1))
+    ) %>% 
+  bind_rows(.id = "dataset")
+
+piwi_genes_dat <- piwi_genes_dat %>% 
+  left_join(distinct(piwi_genes, Gene.stable.ID.1, .keep_all = TRUE), 
+            by = c(".feature" = "Gene.stable.ID.1")) 
+  
+piwi_genes_dat %>% 
+  write_tsv("PIWI_pirna_biogenesis_reactome_Expression_Atlas.txt")
 
 #########################
-
+  left_join(distinct(piwi_genes, Gene.stable.ID.1, .keep_all = "TRUE"),
+              by = c(.feature = "Gene.stable.ID.1" ))
 atlasRes %>% 
     names %>%  
     set_names() %>% 
