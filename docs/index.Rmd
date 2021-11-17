@@ -226,6 +226,8 @@ piwi_genes_dat <- piwi_genes_dat %>%
 piwi_genes_dat %>% 
   write_tsv("PIWI_pirna_biogenesis_reactome_Expression_Atlas.txt")
 
+rm(datasets_atlass_scaled)
+
 #########################
   left_join(distinct(piwi_genes, Gene.stable.ID.1, .keep_all = "TRUE"),
               by = c(.feature = "Gene.stable.ID.1" ))
