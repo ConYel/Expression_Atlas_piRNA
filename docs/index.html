@@ -166,7 +166,7 @@ pre code {
 
 <h1 class="title toc-ignore">Report about conserved transcriptional signatures and evolutionary relationships of germ/stem cells in the PIWI-piRNA pathway</h1>
 <h4 class="author">Constantinos Yeles (Konstantinos Geles)</h4>
-<h4 class="date">Last update : Mon Nov 15 2021</h4>
+<h4 class="date">Last update : Wed Nov 17 2021</h4>
 
 </div>
 
@@ -251,7 +251,9 @@ rm(atlasRes_stem, atlasRes_germ)</code></pre>
                                             &quot;Drosophila melanogaster&quot;,
                                             &quot;Rattus norvegicus&quot;,
                                             &quot;Caenorhabditis elegans&quot;)),
-                                str_detect(Type, &quot;RNA-seq&quot;))</code></pre>
+                                str_detect(Type, &quot;RNA-seq&quot;),
+                                Accession != &quot;E-MTAB-3578&quot;#There may not currently be an Expression Atlas experiment summary available for E-MTAB-3578.
+                                )</code></pre>
 </div>
 <div id="get-the-atlasdata-summaries" class="section level3">
 <h3>Get the AtlasData summaries</h3>
@@ -260,7 +262,7 @@ rm(atlasRes_stem, atlasRes_germ)</code></pre>
 <div id="scale-the-counts-using-tidybulk" class="section level3">
 <h3>scale the counts using tidybulk</h3>
 <pre class="r"><code>datasets_atlass_scaled &lt;- map(
-    names(rnaseqExps)[1:2] %&gt;% 
+    names(rnaseqExps) %&gt;% 
          purrr::set_names(),
     ~ rnaseqExps %&gt;% 
         extract2(.x) %&gt;% 
@@ -280,7 +282,7 @@ datasets &lt;- listDatasets(ensembl) %&gt;%
     dplyr::filter(str_detect(dataset, 
                   c(&quot;mmusculus|rnorvegicus|melanogaster|celegans&quot;))) 
 
-
+httr::set_config(httr::config(ssl_verifypeer = FALSE))
 human &lt;- useMart(&quot;ensembl&quot;, dataset = &quot;hsapiens_gene_ensembl&quot;)
 specieslist  &lt;-  datasets$dataset</code></pre>
 <div id="make-an-object-for-each-species-of-interest-from-the-ensembl-database" class="section level4">
@@ -312,17 +314,18 @@ gene_symbols &lt;- AnnotationDbi::select(EnsDb.Hsapiens.v86,
 <p>Get dataframe of human genes and their homologs</p>
 <pre class="r"><code>for (species in specieslist) {
     print(species)
-    assign(paste0(&quot;homologs_human_&quot;, species), getLDS(attributes = c(&quot;ensembl_gene_id&quot;, &quot;chromosome_name&quot;), 
-                                                      filters = &quot;ensembl_gene_id&quot;, 
-                                                      values = gene_symbols$GENEID, 
-                                                      mart = human, 
-                                                      attributesL = c(&quot;ensembl_gene_id&quot;, 
-                                                                      &quot;chromosome_name&quot;, 
-                                                                      &quot;external_gene_name&quot;), 
-                                                      martL = get(species)))
+    assign(paste0(&quot;homologs_human_&quot;, species), 
+           getLDS(attributes = c(&quot;ensembl_gene_id&quot;, &quot;chromosome_name&quot;),
+                  filters = &quot;ensembl_gene_id&quot;,
+                  values = gene_symbols$GENEID,
+                  mart = human,
+                  attributesL = c(&quot;ensembl_gene_id&quot;, 
+                                  &quot;chromosome_name&quot;, 
+                                  &quot;external_gene_name&quot;),
+                  martL = get(species)))
 }
 
-homologs_human_celegans_gene_ensembl &lt;-  homologs_human_celegans_gene_ensembl %&gt;% 
+homologs_human_celegans_gene_ensembl &lt;- homologs_human_celegans_gene_ensembl %&gt;% 
     mutate(organism_mart = &quot;celegans&quot;) %&gt;% 
     as_tibble() %&gt;% 
     mutate(Chromosome.scaffold.name.1 = as.character(Chromosome.scaffold.name.1))
@@ -348,16 +351,31 @@ homologs_human_rnorvegicus_gene_ensembl &lt;-
 piwi_genes &lt;- dplyr::bind_rows(homologs_human_celegans_gene_ensembl,
                                 homologs_human_dmelanogaster_gene_ensembl,
                                 homologs_human_mmusculus_gene_ensembl,
-                                homologs_human_rnorvegicus_gene_ensembl)</code></pre>
+                                homologs_human_rnorvegicus_gene_ensembl)
+
+rm(homologs_human_celegans_gene_ensembl,
+  homologs_human_dmelanogaster_gene_ensembl,
+   homologs_human_mmusculus_gene_ensembl,
+    homologs_human_rnorvegicus_gene_ensembl,
+  human,  human_EnsDb, mmusculus_gene_ensembl, rnorvegicus_gene_ensembl,
+  dmelanogaster_gene_ensembl, celegans_gene_ensembl)</code></pre>
 <p>Keep only the piRNA biogenesis genes from the datasets</p>
-<pre class="r"><code> piwi_genes_dat &lt;- map(datasets_atlass_scaled,
-    ~filter( .x, is_in(.feature, piwi_genes$Gene.stable.ID.1)) %&gt;% 
-    left_join(distinct(piwi_genes, Gene.stable.ID.1, .keep_all = &quot;TRUE&quot;),
-              by = c(.feature = &quot;Gene.stable.ID.1&quot; ))
-    )
+<pre class="r"><code>piwi_genes_dat &lt;- map(datasets_atlass_scaled,
+    ~as_tibble(.x) %&gt;% 
+      filter(is_in(.feature, piwi_genes$Gene.stable.ID.1))
+    ) %&gt;% 
+  bind_rows(.id = &quot;dataset&quot;)
+
+piwi_genes_dat &lt;- piwi_genes_dat %&gt;% 
+  left_join(distinct(piwi_genes, Gene.stable.ID.1, .keep_all = TRUE), 
+            by = c(&quot;.feature&quot; = &quot;Gene.stable.ID.1&quot;)) 
+  
+piwi_genes_dat %&gt;% 
+  write_tsv(&quot;PIWI_pirna_biogenesis_reactome_Expression_Atlas.txt&quot;)
 
 #########################
-
+  left_join(distinct(piwi_genes, Gene.stable.ID.1, .keep_all = &quot;TRUE&quot;),
+              by = c(.feature = &quot;Gene.stable.ID.1&quot; ))
 atlasRes %&gt;% 
     names %&gt;%  
     set_names() %&gt;% 
