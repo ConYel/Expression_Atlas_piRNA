@@ -1,7 +1,7 @@
 ---
 title: "Report about conserved transcriptional signatures and evolutionary relationships of germ/stem cells in the PIWI-piRNA pathway"
 author: "Constantinos Yeles (Konstantinos Geles)"
-date: "Last update : Thu Nov 18 2021"
+date: "Last update : `r format(Sys.Date(), '%a %b %d %Y')`"
 output:
   html_document:
     toc: yes
@@ -15,7 +15,9 @@ editor_options:
   chunk_output_type: console
 ---
 
-
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+```
 
 # The PIWI-interacting RNA (piRNA) biogenesis
 In this workflow we look on the gene expression patterns of the [The PIWI-interacting RNA (piRNA) biogenesis](https://www.bioconductor.org/packages/release/bioc/html/ExpressionAtlas.html) from REACTOME pathways using datasets from [Expression Atlas Bioconductor Package](https://www.bioconductor.org/packages/release/bioc/html/ExpressionAtlas.html).
