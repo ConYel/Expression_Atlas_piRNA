@@ -297,5 +297,15 @@ piwi_genes_dat %>%
                          cell_line, genotype)
 ```
 
+make a heatmap 
+```{r}
+piwi_genes_dat_heatmap <- 
+    piwi_genes_dat %>% 
+    #filter(str_detect(organism, "sapie")) %>%
+    mutate(counts_scaled_log = log10(counts_scaled+4)) %>% 
+    heatmap(SYMBOL, .sample, counts_scaled_log )  %>% 
+    add_tile(c(AtlasAssayGroup, dataset, organism)) 
+```
+
 
 
