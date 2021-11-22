@@ -23,7 +23,7 @@ knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
 ## The PIWI-piRNA pathway expression in germ/stem cells
 
 Using the [Expression Atlas Bioconductor Package](https://www.bioconductor.org/packages/release/bioc/html/ExpressionAtlas.html) we will 
-search about the expression profiles of genes that are involved in the [piRNA biogenesis](https://reactome.org/PathwayBrowser/#/R-HSA-75944&SEL=R-HSA-163316&PATH=R-HSA-74160) in various organisms and conditions.
+search about the expression profiles of genes that are involved in the [piRNA biogenesis](https://reactome.org/PathwayBrowser/#/R-HSA-211000&SEL=R-HSA-5601884&PATH=R-HSA-74160&DTAB=MT) in various organisms and conditions.
 
 ### Materials and Methods
 The workflow has been primarily carried out on a Linux server, 
@@ -69,12 +69,16 @@ atlasRes_germ <- searchAtlasExperiments( properties = "germ")
 
 Search if there are identical datasets in both sets 
 ```{r}
-atlasRes_germ %>% as_tibble %>% filter(is_in(Accession, atlasRes_stem$Accession))
+atlasRes_germ %>% 
+  as_tibble() %>% 
+  filter(is_in(Accession, atlasRes_stem$Accession))
 ```
 
 join the two sets
 ```{r}
-atlasRes <- as_tibble(atlasRes_stem) %>% full_join(as_tibble(atlasRes_germ))
+atlasRes <- atlasRes_stem %>% 
+  as_tibble() %>% 
+  full_join(as_tibble(atlasRes_germ))
 
 rm(atlasRes_stem, atlasRes_germ)
 ```
@@ -84,21 +88,37 @@ Search which species are in the dataset
 atlasRes %>% dplyr::count(Species, sort = TRUE) 
 ```
 
-We will remove plant species from the dataset and microarray experiments
+We will keep species of human, mouse, rat  fly and C. Elegans. 
+Further, we will keep the RNAseq datasets.
 ```{r}
 atlasRes <- atlasRes %>% dplyr::filter(is_in(Species, 
-                                          c("Mus musculus",
+                                          c("Homo sapiens", 
+                                            "Mus musculus",
                                             "Drosophila melanogaster",
                                             "Rattus norvegicus",
                                             "Caenorhabditis elegans")),
                                 str_detect(Type, "RNA-seq"),
-                                Accession != "E-MTAB-3578"#There may not currently be an Expression Atlas experiment summary available for E-MTAB-3578.
+                                Accession != "E-MTAB-3578" # There may not currently be an Expression Atlas experiment summary available for E-MTAB-3578.
                                 )
+```
+
+### which data to analyse:
+mouse:
+    germ: E-MTAB-5210,
+    stem: E-MTAB-4893, E-GEOD-27843, E-MTAB-7343
+human:
+    germ: ?
+    stem: E-MTAB-3158, E-MTAB-7979
+```{r}
+selected_datasets <- c("E-MTAB-5210","E-MTAB-4893", "E-GEOD-27843", 
+                       "E-MTAB-7343","E-MTAB-3158", "E-MTAB-7979")
+primary_analysis <- atlasRes %>% 
+  dplyr::filter(is_in(Accession, selected_datasets))
 ```
 
 ### Get the AtlasData summaries
 ```{r}
-rnaseqExps <- getAtlasData(atlasRes$Accession)
+rnaseqExps <- getAtlasData(primary_analysis$Accession)
 ```
 
 ### scale the counts using tidybulk
@@ -124,7 +144,7 @@ ensembl = useMart("ensembl")
 
 datasets <- listDatasets(ensembl) %>% 
     dplyr::filter(str_detect(dataset, 
-                  c("mmusculus|rnorvegicus|melanogaster|celegans"))) 
+                  c("mmusculus|hsapiens"))) 
 
 httr::set_config(httr::config(ssl_verifypeer = FALSE))
 human <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
@@ -175,12 +195,12 @@ for (species in specieslist) {
                   martL = get(species)))
 }
 
-homologs_human_celegans_gene_ensembl <- homologs_human_celegans_gene_ensembl %>% 
+#homologs_human_celegans_gene_ensembl <- homologs_human_celegans_gene_ensembl %>% 
     mutate(organism_mart = "celegans") %>% 
     as_tibble() %>% 
     mutate(Chromosome.scaffold.name.1 = as.character(Chromosome.scaffold.name.1))
     
-homologs_human_dmelanogaster_gene_ensembl <- 
+#homologs_human_dmelanogaster_gene_ensembl <- 
     homologs_human_dmelanogaster_gene_ensembl %>% 
     mutate(organism_mart = "dmelanogaster") %>% 
     as_tibble() %>% 
@@ -190,18 +210,30 @@ homologs_human_mmusculus_gene_ensembl <-
     homologs_human_mmusculus_gene_ensembl %>%
     mutate(organism_mart = "mmusculus") %>% 
     as_tibble()%>% 
+    mutate(Chromosome.scaffold.name.1 = as.character(Chromosome.scaffold.name.1),
+           Chromosome.scaffold.name = as.character(Chromosome.scaffold.name))
+
+homologs_human_hsapiens_gene_ensembl <- 
+    homologs_human_hsapiens_gene_ensembl %>%
+    mutate(organism_mart = "hsapiens") %>% 
+    as_tibble()%>% 
     mutate(Chromosome.scaffold.name.1 = as.character(Chromosome.scaffold.name.1))
 
-homologs_human_rnorvegicus_gene_ensembl <- 
+#homologs_human_rnorvegicus_gene_ensembl <- 
     homologs_human_rnorvegicus_gene_ensembl %>% 
     mutate(organism_mart = "rnorvegicus") %>% 
     as_tibble()%>% 
     mutate(Chromosome.scaffold.name.1 = as.character(Chromosome.scaffold.name.1))
 
-piwi_genes <- dplyr::bind_rows(homologs_human_celegans_gene_ensembl,
+#piwi_genes <- dplyr::bind_rows(homologs_human_celegans_gene_ensembl,
                                 homologs_human_dmelanogaster_gene_ensembl,
                                 homologs_human_mmusculus_gene_ensembl,
-                                homologs_human_rnorvegicus_gene_ensembl)
+                                homologs_human_rnorvegicus_gene_ensembl) %>% 
+  left_join(gene_symbols, by = c("Gene.stable.ID" = "GENEID"))
+
+piwi_genes <- dplyr::bind_rows(homologs_human_mmusculus_gene_ensembl,
+                               homologs_human_hsapiens_gene_ensembl) %>% 
+  left_join(gene_symbols, by = c("Gene.stable.ID" = "GENEID"))
 
 rm(homologs_human_celegans_gene_ensembl,
   homologs_human_dmelanogaster_gene_ensembl,
@@ -224,19 +256,45 @@ piwi_genes_dat <- piwi_genes_dat %>%
             by = c(".feature" = "Gene.stable.ID.1")) 
   
 piwi_genes_dat %>% 
-  write_tsv("PIWI_pirna_biogenesis_reactome_Expression_Atlas.txt")
+  write_tsv("PIWI_pirna_biogenesis_reactome_mouse_human_Expression_Atlas.txt")
 
 rm(datasets_atlass_scaled)
 
-#########################
-  left_join(distinct(piwi_genes, Gene.stable.ID.1, .keep_all = "TRUE"),
-              by = c(.feature = "Gene.stable.ID.1" ))
-atlasRes %>% 
+# summaries for each column
+
+piwi_genes_dat %>% 
     names %>%  
-    set_names() %>% 
-    map( ~dplyr::count(as_tibble(atlasRes), .data[[.x]], sort = TRUE))
+    purrr::set_names() %>% 
+    map( ~dplyr::count(piwi_genes_dat, .data[[.x]], sort = TRUE))
 
+filter(piwi_genes_dat, str_detect(organism, "mus")) %>%  
+  select_if(~!all(is.na(.))) %>% 
+  names() %>% 
+  purrr::set_names() %>% 
+  map(as.symbol) %>% 
+  map(~filter(piwi_genes_dat, str_detect(organism, "mus")) %>%  
+        select_if(~!all(is.na(.))) %>% count(!!.x )) 
 
+piwi_genes_dat %>% 
+  filter(str_detect(organism, "mus")) %>% 
+  count(dataset, AtlasAssayGroup, cell_type, developmental_stage,
+                         disease, organism_part, cell_line, 
+                         genotype, strain)
+
+piwi_genes_dat %>% 
+  filter(str_detect(organism, "sapie")) %>%  
+  select_if(~!all(is.na(.))) %>% 
+  names() %>% 
+  purrr::set_names() %>% 
+  map(as.symbol) %>%
+  map(~filter(piwi_genes_dat, str_detect(organism, "sapie")) %>%  
+        select_if(~!all(is.na(.))) %>% count(!!.x )) 
+
+piwi_genes_dat %>% 
+  filter(str_detect(organism, "sapie")) %>% 
+  count(dataset, AtlasAssayGroup, cell_type, developmental_stage,
+                         disease, organism_part, progenitor_cell_type, 
+                         cell_line, genotype)
 ```
 
 
