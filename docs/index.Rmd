@@ -44,8 +44,9 @@ For the application of the workflow, the following tools/ workflows have been us
 if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
-BiocManager::install(c("ExpressionAtlas", "biomaRt", "AnnotationDbi", 
-                       "EnsDb.Hsapiens.v86", "tidybulk", "tidySummarizedExperiment"))
+BiocManager::install(c("ExpressionAtlas", "tidySummarizedExperiment",
+                       "biomaRt", "AnnotationDbi", "tidyHeatmap",
+                       "EnsDb.Hsapiens.v86", "tidybulk", ))
 
 install.packages(c("tidyverse", "magrittr"))
 
@@ -58,6 +59,7 @@ suppressPackageStartupMessages({
   library('tidySummarizedExperiment')
   library('tidyverse')
   library('magrittr')
+  library('tidyHeatmap')
 })
 ```
 
@@ -130,8 +132,9 @@ datasets_atlass_scaled <- map(
         extract2(.x) %>% 
         extract2("rnaseq") %>%
         identify_abundant(factor_of_interest = AtlasAssayGroup) %>% 
-        scale_abundance()
-)
+        scale_abundance() %>% 
+        as_tibble()
+) %>% bind_rows(.id = "dataset")
 
 rm(atlasRes, rnaseqExps)
 ```
@@ -140,14 +143,13 @@ rm(atlasRes, rnaseqExps)
 *with small modifications 
 #### Use biomaRt to access the datasets of species we prefere
 ```{r}
-ensembl = useMart("ensembl")
+ensembl <- useMart("ensembl")
 
 datasets <- listDatasets(ensembl) %>% 
     dplyr::filter(str_detect(dataset, 
                   c("mmusculus|hsapiens"))) 
 
-httr::set_config(httr::config(ssl_verifypeer = FALSE))
-human <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+# httr::set_config(httr::config(ssl_verifypeer = FALSE))# use only if you get errors
 specieslist  <-  datasets$dataset
 ```
 
@@ -176,11 +178,12 @@ PIWI_pirna_biogenesis <- c("P24928", "P62487", "P52435", "P36954", "O15514",
 # select on the above identifiers
 gene_symbols <- AnnotationDbi::select(EnsDb.Hsapiens.v86, 
                        keys = human_EnsDb, 
-                       columns = c("SYMBOL", "UNIPROTID", "GENEBIOTYPE")) %>% 
-    dplyr::filter(UNIPROTID %in% PIWI_pirna_biogenesis)
+                       columns = c("SYMBOL", "UNIPROTID", "GENEBIOTYPE")) 
+
+#%>% dplyr::filter(UNIPROTID %in% PIWI_pirna_biogenesis)
 ```
 
-Get dataframe of human genes and their homologs 
+#### Get dataframe of human genes and their homologs 
 ```{r}
 for (species in specieslist) {
     print(species)
@@ -188,23 +191,12 @@ for (species in specieslist) {
            getLDS(attributes = c("ensembl_gene_id", "chromosome_name"),
                   filters = "ensembl_gene_id",
                   values = gene_symbols$GENEID,
-                  mart = human,
+                  mart = hsapiens_gene_ensembl,
                   attributesL = c("ensembl_gene_id", 
                                   "chromosome_name", 
                                   "external_gene_name"),
                   martL = get(species)))
 }
-
-#homologs_human_celegans_gene_ensembl <- homologs_human_celegans_gene_ensembl %>% 
-    mutate(organism_mart = "celegans") %>% 
-    as_tibble() %>% 
-    mutate(Chromosome.scaffold.name.1 = as.character(Chromosome.scaffold.name.1))
-    
-#homologs_human_dmelanogaster_gene_ensembl <- 
-    homologs_human_dmelanogaster_gene_ensembl %>% 
-    mutate(organism_mart = "dmelanogaster") %>% 
-    as_tibble() %>% 
-    mutate(Chromosome.scaffold.name.1 = as.character(Chromosome.scaffold.name.1))
 
 homologs_human_mmusculus_gene_ensembl <- 
     homologs_human_mmusculus_gene_ensembl %>%
@@ -219,46 +211,33 @@ homologs_human_hsapiens_gene_ensembl <-
     as_tibble()%>% 
     mutate(Chromosome.scaffold.name.1 = as.character(Chromosome.scaffold.name.1))
 
-#homologs_human_rnorvegicus_gene_ensembl <- 
-    homologs_human_rnorvegicus_gene_ensembl %>% 
-    mutate(organism_mart = "rnorvegicus") %>% 
-    as_tibble()%>% 
-    mutate(Chromosome.scaffold.name.1 = as.character(Chromosome.scaffold.name.1))
-
-#piwi_genes <- dplyr::bind_rows(homologs_human_celegans_gene_ensembl,
-                                homologs_human_dmelanogaster_gene_ensembl,
-                                homologs_human_mmusculus_gene_ensembl,
-                                homologs_human_rnorvegicus_gene_ensembl) %>% 
-  left_join(gene_symbols, by = c("Gene.stable.ID" = "GENEID"))
-
 piwi_genes <- dplyr::bind_rows(homologs_human_mmusculus_gene_ensembl,
                                homologs_human_hsapiens_gene_ensembl) %>% 
   left_join(gene_symbols, by = c("Gene.stable.ID" = "GENEID"))
 
-rm(homologs_human_celegans_gene_ensembl,
-  homologs_human_dmelanogaster_gene_ensembl,
-   homologs_human_mmusculus_gene_ensembl,
-    homologs_human_rnorvegicus_gene_ensembl,
-  human,  human_EnsDb, mmusculus_gene_ensembl, rnorvegicus_gene_ensembl,
-  dmelanogaster_gene_ensembl, celegans_gene_ensembl)
+rm(homologs_human_mmusculus_gene_ensembl,
+   human_EnsDb, mmusculus_gene_ensembl)
+```
+
+#### Keep the samples which are normal/ wild type
+```{r}
+datasets_atlass_scaled <- datasets_atlass_scaled %>% 
+  left_join(distinct(piwi_genes, Gene.stable.ID.1, .keep_all = TRUE), 
+            by = c(".feature" = "Gene.stable.ID.1")) 
+
+# keep the wild type samples
+atlass_scaled_wt <- datasets_atlass_scaled %>% 
+  mutate(cell_type = ifelse(is.na(cell_type), "stem cell", cell_type)) %>% 
+  filter(!str_detect(cell_type, "intestinal|endoderm"),str_detect(cell_type, "stem|Undiffe|nduce"),
+         is.na(genotype)|str_detect(genotype, "wild"))
 ```
 
 Keep only the piRNA biogenesis genes from the datasets
 ```{r}
-piwi_genes_dat <- map(datasets_atlass_scaled,
-    ~as_tibble(.x) %>% 
-      filter(is_in(.feature, piwi_genes$Gene.stable.ID.1))
-    ) %>% 
-  bind_rows(.id = "dataset")
 
-piwi_genes_dat <- piwi_genes_dat %>% 
-  left_join(distinct(piwi_genes, Gene.stable.ID.1, .keep_all = TRUE), 
-            by = c(".feature" = "Gene.stable.ID.1")) 
-  
 piwi_genes_dat %>% 
   write_tsv("PIWI_pirna_biogenesis_reactome_mouse_human_Expression_Atlas.txt")
 
-rm(datasets_atlass_scaled)
 
 # summaries for each column
 
@@ -279,7 +258,16 @@ piwi_genes_dat %>%
   filter(str_detect(organism, "mus")) %>% 
   count(dataset, AtlasAssayGroup, cell_type, developmental_stage,
                          disease, organism_part, cell_line, 
-                         genotype, strain)
+                         genotype, strain) %>% view
+
+piwi_genes_dat %>% 
+  mutate(cell_type = ifelse(is.na(cell_type), "stem cell", cell_type)) %>% 
+  count(dataset, cell_type, developmental_stage,
+                         organism_part, organism, 
+                         genotype, strain) %>% 
+  filter(!str_detect(cell_type, "intestinal|endoderm"),str_detect(cell_type, "stem|Undiffe|nduce"),
+         is.na(genotype)|str_detect(genotype, "wild"),
+         )
 
 piwi_genes_dat %>% 
   filter(str_detect(organism, "sapie")) %>%  
@@ -290,11 +278,7 @@ piwi_genes_dat %>%
   map(~filter(piwi_genes_dat, str_detect(organism, "sapie")) %>%  
         select_if(~!all(is.na(.))) %>% count(!!.x )) 
 
-piwi_genes_dat %>% 
-  filter(str_detect(organism, "sapie")) %>% 
-  count(dataset, AtlasAssayGroup, cell_type, developmental_stage,
-                         disease, organism_part, progenitor_cell_type, 
-                         cell_line, genotype)
+
 ```
 
 make a heatmap 
