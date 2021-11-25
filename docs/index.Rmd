@@ -168,6 +168,7 @@ for (i in seq_along(specieslist)) {
 human_EnsDb <- keys(EnsDb.Hsapiens.v86, keytype = "GENEID")
 
 # IDs of piRNA biogenesis pathway genes
+# DOI: 10.3180/REACT_267790.1
 PIWI_pirna_biogenesis <- c("P24928", "P62487", "P52435", "P36954", "O15514",
                            "P61218", "P52434", "P62875", "P19387", 'P53803',	
                            "P19388", "P30876", 'Q5T8I9', "Q7Z3Z4", "Q96JY0",
@@ -176,6 +177,7 @@ PIWI_pirna_biogenesis <- c("P24928", "P62487", "P52435", "P36954", "O15514",
                            "Q8N2A8", "P07900", "O75344", "P10243")
 
 # Transcriptional regulation of pluripotent stem cells pathway
+# DOI: 10.3180/REACT_200812.1
 pluripotent_reactome <- c("P48431", "Q9H9S0", "Q01860", "P09038", "P40763", 
                           "Q9UJU5", "O60481", "P13385", "Q15406-1", "Q9NSC2",
                           "Q9UJQ4", "P21709", "Q7L190", "Q99814", "Q9GZV8", 
@@ -228,23 +230,31 @@ rm(homologs_human_mmusculus_gene_ensembl,
 
 #### Keep the samples which are normal/ wild type
 ```{r}
+# add info about the genes
 datasets_atlass_scaled <- datasets_atlass_scaled %>% 
   left_join(distinct(piwi_genes, Gene.stable.ID.1, .keep_all = TRUE), 
             by = c(".feature" = "Gene.stable.ID.1")) 
 
 # keep the wild type samples
 atlass_scaled_wt <- datasets_atlass_scaled %>% 
-  mutate(cell_type = ifelse(is.na(cell_type), "stem cell", cell_type)) %>% 
-  filter(!str_detect(cell_type, "intestinal|endoderm"),str_detect(cell_type, "stem|Undiffe|nduce"),
+  mutate(cell_type = ifelse(is.na(cell_type), organism_part, cell_type)) %>% 
+  filter(!str_detect(cell_type, "fibro|terminally|intestinal|endoderm"),
          is.na(genotype)|str_detect(genotype, "wild"))
+
+
+
+
+str_detect(cell_type, "stem|Undiffe|nduce")
+  
+```
+
+#### export the scaled genes
+```{r}
+atlass_scaled_wt %>% write_tsv("pirna_biogenesis_and_pluripotent_reactome_mouse_human_Expression_Atlas.txt")
 ```
 
 Keep only the piRNA biogenesis genes from the datasets
 ```{r}
-
-piwi_genes_dat %>% 
-  write_tsv("PIWI_pirna_biogenesis_reactome_mouse_human_Expression_Atlas.txt")
-
 # summaries for each column
 
 piwi_genes_dat %>% 
@@ -291,9 +301,12 @@ make a heatmap
 ```{r}
 piwi_genes_dat_heatmap <- 
     atlass_scaled_wt %>% 
-    filter(is_in(UNIPROTID, PIWI_pirna_biogenesis)) %>%
+    filter(is_in(UNIPROTID, c(PIWI_pirna_biogenesis, pluripotent_reactome))) %>%
+    mutate(Pathway = case_when(
+      is_in(UNIPROTID, pluripotent_reactome) ~ "Transcriptional Regulation of Pluripotent Stem Cells pathway",
+      is_in(UNIPROTID, PIWI_pirna_biogenesis) ~ "PIWI piRNA Biogenesis pathway",)) %>% 
     mutate(counts_scaled_log = log10(counts_scaled + 4)) %>% 
     heatmap(SYMBOL, .sample, counts_scaled_log )  %>% 
-    add_tile(c(AtlasAssayGroup, dataset, organism, cell_type)) 
+    add_tile(c(organism, dataset, cell_type, Pathway)) 
 ```
 
