@@ -175,6 +175,13 @@ PIWI_pirna_biogenesis <- c("P24928", "P62487", "P52435", "P36954", "O15514",
                            "Q9NQI0", "Q9BXT6", "Q9BXT4", "Q96J94", "O60522", 
                            "Q8N2A8", "P07900", "O75344", "P10243")
 
+# Transcriptional regulation of pluripotent stem cells pathway
+pluripotent_reactome <- c("P48431", "Q9H9S0", "Q01860", "P09038", "P40763", 
+                          "Q9UJU5", "O60481", "P13385", "Q15406-1", "Q9NSC2",
+                          "Q9UJQ4", "P21709", "Q7L190", "Q99814", "Q9GZV8", 
+                          'Q96SZ4', 'Q15796', "Q13485", "Q9H334-8", "Q13285",
+                          "P40424", "O43474", "Q9Y2N7", "Q9H9Z2")
+
 # select on the above identifiers
 gene_symbols <- AnnotationDbi::select(EnsDb.Hsapiens.v86, 
                        keys = human_EnsDb, 
@@ -238,7 +245,6 @@ Keep only the piRNA biogenesis genes from the datasets
 piwi_genes_dat %>% 
   write_tsv("PIWI_pirna_biogenesis_reactome_mouse_human_Expression_Atlas.txt")
 
-
 # summaries for each column
 
 piwi_genes_dat %>% 
@@ -290,6 +296,4 @@ piwi_genes_dat_heatmap <-
     heatmap(SYMBOL, .sample, counts_scaled_log )  %>% 
     add_tile(c(AtlasAssayGroup, dataset, organism, cell_type)) 
 ```
-
-
 
