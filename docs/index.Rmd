@@ -310,3 +310,68 @@ piwi_genes_dat_heatmap <-
     add_tile(c(organism, dataset, cell_type, Pathway)) 
 ```
 
+### Check gene sets expression ranks
+```{r}
+# link transcripts to prot_id
+p_genes <- piwi_genes %>% 
+  filter(is_in(UNIPROTID, c(PIWI_pirna_biogenesis))) %>% 
+  distinct(Gene.stable.ID.1,SYMBOL)
+
+stem_genes <- piwi_genes %>% 
+  filter(is_in(UNIPROTID, c(pluripotent_reactome))) %>% 
+  distinct(Gene.stable.ID.1,SYMBOL)
+
+# singscore
+library(singscore)
+
+datasets_atlass_scaled_for_sing <- map(
+    names(rnaseqExps) %>% 
+         purrr::set_names(),
+    ~ rnaseqExps %>% 
+        extract2(.x) %>% 
+        extract2("rnaseq") %>%
+        identify_abundant(factor_of_interest = AtlasAssayGroup) %>% 
+        scale_abundance()
+) 
+
+rankData <- rankGenes(datasets_atlass_scaled_for_sing$`E-MTAB-7343`)
+
+scoredf_p <- simpleScore(rankData, 
+                       upSet = stem_genes$Gene.stable.ID.1)
+scoredf_pwi <- simpleScore(rankData, 
+                       upSet = p_genes$Gene.stable.ID.1)
+
+plotRankDensity(rankData[,5,drop = FALSE], 
+                upSet = p_genes$Gene.stable.ID.1, 
+                isInteractive = FALSE)
+
+plotRankDensity(rankData[,5,drop = FALSE], 
+                upSet = stem_genes$Gene.stable.ID.1, 
+                isInteractive = FALSE)
+
+
+plotScoreLandscape(scoredf_pwi, scoredf_p, 
+                   scorenames = c('scoredf_pwi-EPI','scoredf_p-MES'), hexMin = 10)
+
+
+ncores <- 4
+permuteResult <-
+  generateNull(
+    upSet = stem_genes$Gene.stable.ID.1,
+    downSet = NULL,
+    rankData = rankData,
+    #subSamples = 1:5,
+    centerScore = TRUE,
+    #knownDirection = TRUE,
+    B = 1000,
+    ncores = ncores,
+    seed = 1,
+    useBPPARAM = NULL
+  )
+
+pvals <- getPvals(permuteResult, scoredf_p)
+
+plotNull(permuteResult, scoredf, pvals, sampleNames = names(pvals)[1])
+plotNull(permuteResult, scoredf, pvals, sampleNames = names(pvals)[1:9])
+```
+
